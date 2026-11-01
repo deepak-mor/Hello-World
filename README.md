@@ -10,6 +10,7 @@ A teleprompter for iPhone. A black window drops out of the Dynamic Island / notc
 - **Drag to scrub, tap to pause.** Space bar works with a keyboard.
 - **Camera preview + recording**: see yourself behind the script and record a take, then Save to Photos.
 - Window height from a slim strip under the camera to full screen, text size, mirror mode for glass rigs, countdown.
+- **Float over other apps**: turns your script into a Picture-in-Picture window that stays on top of Instagram, TikTok, Zoom and more. Set your reading pace, tap Make, then Float it.
 - Works offline once installed. Your script is saved on the phone.
 
 ## Put it on your iPhone

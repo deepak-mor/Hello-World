@@ -143,6 +143,23 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
 .sheet .acts button{flex:1;border-radius:12px;padding:14px;border:1px solid var(--line);background:var(--bg);font-weight:700}
 .sheet .acts .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 
+
+/* ---------- Float over other apps ---------- */
+.float{display:flex;flex-direction:column;gap:12px;background:var(--raise);border:1px solid var(--line);border-radius:14px;padding:16px}
+.float h2{margin:0;font:700 19px/1.2 var(--f-display);display:flex;align-items:center;gap:10px}
+.float h2 .pip{width:26px;height:18px;border:2px solid var(--fg);border-radius:4px;position:relative;flex:none}
+.float h2 .pip::after{content:"";position:absolute;right:2px;bottom:2px;width:10px;height:7px;background:var(--accent);border-radius:2px}
+.float p{margin:0;color:var(--dim);font-size:14.5px}
+.float .row.slider{padding:0;min-height:0;background:none}
+.btn2{border:1px solid var(--accent);background:none;color:var(--accent);border-radius:12px;padding:14px;font:700 16px/1 var(--f-display)}
+.btn2.solid{background:var(--accent);color:var(--accent-ink)}
+.btn2:disabled{opacity:.45}
+.progress{height:8px;border-radius:99px;background:var(--bg);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.float video{width:100%;aspect-ratio:16/9;max-width:100%;border-radius:10px;background:#000;border:1px solid var(--line)}
+.float ol{margin:0;padding-left:20px;color:var(--fg);font-size:14.5px;display:grid;gap:6px}
+.float .apps{color:var(--dim);font-size:13px}
+
 @media (orientation:landscape) and (max-height:500px){
   .island{--winh:46vh}
   textarea#script{min-height:50vh}
@@ -214,6 +231,30 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     </div>
   </section>
   <p class="note" id="envNote"></p>
+  <section class="float" aria-labelledby="floatTitle">
+    <h2 id="floatTitle"><span class="pip" aria-hidden="true"></span>Float over other apps</h2>
+    <p>Turns your script into a small floating window that stays on top of Instagram, TikTok, Zoom and other apps, using iPhone Picture in Picture. It scrolls at a steady pace; voice following isn’t possible here because the other app uses the microphone.</p>
+    <div class="row slider">
+      <div class="head"><label for="wpm">Reading pace</label><output id="wpmOut"></output></div>
+      <input type="range" id="wpm" min="90" max="220" step="5">
+    </div>
+    <button type="button" class="btn2" id="makeFloat">Make floating prompter</button>
+    <div id="floatWork" hidden>
+      <div class="progress" aria-hidden="true"><i id="floatBar"></i></div>
+      <p id="floatMsg" aria-live="polite">Preparing…</p>
+    </div>
+    <div id="floatReady" hidden style="display:flex;flex-direction:column;gap:12px">
+      <video id="floatVid" playsinline muted preload="auto" autopictureinpicture></video>
+      <button type="button" class="btn2 solid" id="floatGo">Float it</button>
+      <ol>
+        <li>Tap <b>Float it</b>. A small window pops out, paused.</li>
+        <li>Swipe up to go home and open the app you’re recording in.</li>
+        <li>Drag the window up next to the camera and pinch to make it bigger.</li>
+        <li>Tap the window, then ▶ when you’re ready. Use ⏸ and the 15-second skip buttons to control it.</li>
+      </ol>
+      <p class="apps" id="floatNote">Works over most apps. Apple’s own Camera app may hide floating windows.</p>
+    </div>
+  </section>
 
   <div class="go-bar"><button type="button" class="go" id="go">Start prompting</button></div>
 </main>
@@ -271,7 +312,7 @@ So here's the plan for the next few minutes. First, the setup. Then, three habit
 
 Let's get into it.`;
 
-  const DEF = {script: SAMPLE, mode: 'voice', speed: 48, fs: 26, winh: 34, width: 'narrow', camera: false, mirror: false, count: 3};
+  const DEF = {script: SAMPLE, mode: 'voice', speed: 48, fs: 26, winh: 34, width: 'narrow', wpm: 140, camera: false, mirror: false, count: 3};
   let S = {...DEF};
   try { Object.assign(S, JSON.parse(localStorage.getItem('cueisland') || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem('cueisland', JSON.stringify(S)); $('saved').textContent = 'Saved on this phone'; } catch (e) { $('saved').textContent = ''; } };
@@ -628,6 +669,202 @@ Let's get into it.`;
   }
   $('go').onclick = open;
   window.addEventListener('resize', () => { if (!P.hidden) { layout(); if (mode === 'voice') setIdx(idx); } });
+
+
+  /* ---------- Float over other apps (Picture in Picture) ----------
+     iOS lets only Picture-in-Picture video float above other apps, and a page in the
+     background can't keep drawing. So we render the scrolling script into a real
+     MP4 up front, then float that video. */
+  const W = 1280, H = 720, FPS = 30, LEAD = 3, TAIL = 3;
+  const wpmEl = $('wpm');
+  wpmEl.value = S.wpm;
+  const wpmOut = () => { $('wpmOut').textContent = S.wpm + ' words/min'; };
+  wpmOut();
+  wpmEl.addEventListener('input', () => { S.wpm = +wpmEl.value; wpmOut(); save(); });
+
+  function floatLayout(ctx) {
+    const fs = 64, lh = Math.round(fs * 1.32), pad = 70, maxW = W - pad * 2;
+    ctx.font = `700 ${fs}px "Atkinson Hyperlegible", -apple-system, system-ui, sans-serif`;
+    const lines = [];
+    for (const para of S.script.trim().split(/\n\s*\n|\n/)) {
+      const ws = para.trim().split(/\s+/).filter(Boolean);
+      if (!ws.length) continue;
+      if (lines.length) lines.push({text: '', words: 0, gap: true});
+      let cur = '';
+      for (const w of ws) {
+        const t = cur ? cur + ' ' + w : w;
+        if (ctx.measureText(t).width > maxW && cur) { lines.push({text: cur, words: countWords(cur)}); cur = w; }
+        else cur = t;
+      }
+      if (cur) lines.push({text: cur, words: countWords(cur)});
+    }
+    // Time per line follows its word count; a paragraph break is a short breath.
+    const spw = 60 / S.wpm;
+    let t = LEAD, y = 0;
+    for (const L of lines) {
+      L.y = y; L.t0 = t;
+      const h = L.gap ? lh * .45 : lh;
+      t += L.gap ? .5 : Math.max(.6, L.words * spw);
+      y += h; L.t1 = t; L.h = h;
+    }
+    return {lines, fs, lh, pad, font: ctx.font, total: t + TAIL};
+  }
+  function drawFloat(ctx, lay, t) {
+    const {lines, lh, pad} = lay, readY = Math.round(H * .26);
+    // Line i sits on the reading line at its start time, then slides up as it is read.
+    let cur = -1;
+    for (let i = 0; i < lines.length; i++) if (t >= lines[i].t0) cur = i;
+    const scrollY = cur >= 0 ? lines[cur].y + (Math.min(1, Math.max(0, (t - lines[cur].t0) / (lines[cur].t1 - lines[cur].t0)))) * lines[cur].h : 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    if (S.mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); }
+    ctx.textBaseline = 'top';
+    ctx.font = lay.font;
+    for (let i = 0; i < lines.length; i++) {
+      const L = lines[i]; if (L.gap) continue;
+      const y = readY + L.y - scrollY;
+      if (y < -lh || y > H) continue;
+      ctx.fillStyle = i < cur ? '#5a5263' : '#f2eef6';
+      ctx.fillText(L.text, pad, y);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // reading-line marker
+    ctx.fillStyle = '#ffb35c';
+    const mx = S.mirror ? W - 30 : 24;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(mx, readY + 6, 8, lh - 22, 4) : ctx.rect(mx, readY + 6, 8, lh - 22); ctx.fill();
+    // soft fades top and bottom
+    let g = ctx.createLinearGradient(0, 0, 0, readY - 10);
+    g.addColorStop(0, 'rgba(0,0,0,.95)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, readY - 10);
+    g = ctx.createLinearGradient(0, H * .72, 0, H);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = g; ctx.fillRect(0, H * .72, W, H * .28);
+    if (t < LEAD) {
+      ctx.fillStyle = '#ffb35c'; ctx.font = '700 40px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'right'; ctx.fillText('Starting in ' + Math.ceil(LEAD - t), W - 40, 30); ctx.textAlign = 'left';
+    }
+  }
+
+  function loadScript(src) {
+    return new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); });
+  }
+  async function getMuxer() {
+    if (window.Mp4Muxer) return window.Mp4Muxer;
+    try { await loadScript('vendor/mp4-muxer.js'); } catch (e) {}
+    if (!window.Mp4Muxer) { try { await loadScript('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js'); } catch (e) {} }
+    return window.Mp4Muxer || null;
+  }
+  async function pickCodec() {
+    if (!window.VideoEncoder || !window.VideoFrame) return null;
+    const tries = [['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42002a'], ['vp9', 'vp09.00.31.08']];
+    for (const [mux, codec] of tries) {
+      const cfg = {codec, width: W, height: H, bitrate: 2500000, framerate: FPS};
+      if (mux === 'avc') cfg.avc = {format: 'avc'};
+      try { if ((await VideoEncoder.isConfigSupported(cfg)).supported) return {mux, cfg}; } catch (e) {}
+    }
+    return null;
+  }
+  const progress = (f, msg) => { $('floatBar').style.width = Math.round(f * 100) + '%'; if (msg) $('floatMsg').textContent = msg; };
+
+  async function renderFast(lay, codec, Muxer) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const muxer = new Muxer.Muxer({target: new Muxer.ArrayBufferTarget(), video: {codec: codec.mux, width: W, height: H, frameRate: FPS}, fastStart: 'in-memory'});
+    let failed = null;
+    const enc = new VideoEncoder({output: (c, m) => muxer.addVideoChunk(c, m), error: e => { failed = e; }});
+    enc.configure(codec.cfg);
+    const n = Math.ceil(lay.total * FPS);
+    for (let i = 0; i < n; i++) {
+      if (failed) throw failed;
+      drawFloat(ctx, lay, i / FPS);
+      const fr = new VideoFrame(cv, {timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS)});
+      enc.encode(fr, {keyFrame: i % (FPS * 2) === 0});
+      fr.close();
+      while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
+      if (i % 15 === 0) { progress(i / n, `Making your floating prompter… ${Math.round(i / n * 100)}%`); await new Promise(r => setTimeout(r, 0)); }
+    }
+    await enc.flush(); enc.close();
+    if (failed) throw failed;
+    muxer.finalize();
+    return new Blob([muxer.target.buffer], {type: 'video/mp4'});
+  }
+  async function renderRealtime(lay) {
+    // Fallback for browsers without WebCodecs: record the canvas as it plays (takes as long as the read).
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    drawFloat(ctx, lay, 0);
+    const stream = cv.captureStream(FPS);
+    const type = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    const rec = new MediaRecorder(stream, type ? {mimeType: type, videoBitsPerSecond: 2500000} : undefined);
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const done = new Promise(r => rec.onstop = r);
+    rec.start(1000);
+    const t0 = performance.now();
+    await new Promise(resolve => {
+      const step = () => {
+        const t = (performance.now() - t0) / 1000;
+        drawFloat(ctx, lay, Math.min(t, lay.total));
+        progress(t / lay.total, `Recording your floating prompter: ${fmt(Math.min(t, lay.total))} of ${fmt(lay.total)}. Keep this screen open.`);
+        if (t >= lay.total) resolve(); else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    rec.stop(); await done;
+    return new Blob(chunks, {type: rec.mimeType || type || 'video/mp4'});
+  }
+
+  let floatURL = null, busy = false;
+  $('makeFloat').onclick = async () => {
+    if (busy) return;
+    if (!countWords(S.script)) { ta.focus(); return; }
+    busy = true; $('makeFloat').disabled = true;
+    $('floatReady').hidden = true; $('floatWork').hidden = false; progress(0, 'Preparing…');
+    try {
+      try { await Promise.race([document.fonts.load('700 64px "Atkinson Hyperlegible"'), new Promise(r => setTimeout(r, 1500))]); } catch (e) {}
+      const probe = document.createElement('canvas').getContext('2d');
+      const lay = floatLayout(probe);
+      if (!lay.lines.length) throw new Error('empty');
+      const [codec, Muxer] = await Promise.all([pickCodec(), getMuxer()]);
+      let blob = null;
+      if (codec && Muxer) { try { blob = await renderFast(lay, codec, Muxer); } catch (e) { blob = null; } }
+      if (!blob) {
+        if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('unsupported');
+        blob = await renderRealtime(lay);
+      }
+      if (floatURL) URL.revokeObjectURL(floatURL);
+      floatURL = URL.createObjectURL(blob);
+      const v = $('floatVid');
+      v.src = floatURL; v.load();
+      await new Promise(r => { v.onloadedmetadata = r; setTimeout(r, 4000); });
+      $('floatWork').hidden = true; $('floatReady').hidden = false;
+      $('makeFloat').textContent = 'Remake with new script or pace';
+      $('floatReady').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    } catch (e) {
+      progress(0, e.message === 'unsupported' ? 'This browser can’t make the floating video. Use Safari on iOS 15 or later.' : 'Something went wrong making the video. Try again, or shorten the script.');
+    } finally { busy = false; $('makeFloat').disabled = false; }
+  };
+
+  $('floatGo').onclick = () => {
+    const v = $('floatVid');
+    v.muted = true;
+    let entered = false;
+    const pauseOnEnter = () => { if (!entered) { entered = true; setTimeout(() => { v.pause(); v.currentTime = 0; }, 150); } };
+    v.addEventListener('enterpictureinpicture', pauseOnEnter, {once: true});
+    v.addEventListener('webkitpresentationmodechanged', () => { if (v.webkitPresentationMode === 'picture-in-picture') pauseOnEnter(); });
+    const playP = v.play();
+    try {
+      if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) {
+        v.webkitSetPresentationMode('picture-in-picture');
+      } else if (document.pictureInPictureEnabled && v.requestPictureInPicture) {
+        v.requestPictureInPicture().catch(() => noPip());
+      } else noPip();
+    } catch (e) { noPip(); }
+    if (playP) playP.catch(() => {});
+  };
+  function noPip() {
+    $('floatNote').textContent = 'Picture in Picture isn’t available here. Open this page in Safari (not the Home Screen app), and check Settings › General › Picture in Picture is on.';
+  }
 
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude|anthropic/.test(location.hostname)) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
