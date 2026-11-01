@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cue Island">
+<meta name="theme-color" content="#0c0a10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<!--ARTIFACT-START-->
+<title>Cue Island</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+<style>
+/* Layout: one-column phone editor; the prompter hugs the top of the screen, right under the front camera, so your eyes stay on the lens. Deliberately single dark theme (stage lighting). */
+:root{
+  --bg:#0c0a10; --panel:#000; --raise:#17141d; --line:#2a2532;
+  --fg:#f2eef6; --dim:#8d8597; --read:#4f4858;
+  --accent:#ffb35c; --accent-ink:#1f1406; --rec:#ff5a5f;
+  --f-display:"Bricolage Grotesque",ui-rounded,system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 var(--f-body);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ---------- Editor ---------- */
+.editor{max-width:640px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:18px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:calc(14px + env(safe-area-inset-top,0px)) calc(120px + env(safe-area-inset-bottom,0px))}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .pill{width:46px;height:16px;border-radius:99px;background:var(--panel);border:1px solid var(--line);position:relative}
+.brand .pill::after{content:"";position:absolute;right:6px;top:4px;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.brand h1{font:700 22px/1 var(--f-display);letter-spacing:-.01em;margin:0}
+.brand small{margin-left:auto;color:var(--dim);font-size:13px}
+.lede{margin:0;color:var(--dim);font-size:15px;max-width:52ch}
+
+.script-box{display:flex;flex-direction:column;gap:8px}
+.label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+textarea#script{width:100%;min-height:42vh;resize:vertical;background:var(--raise);border:1px solid var(--line);border-radius:14px;padding:14px;font-size:17px;line-height:1.55}
+.meta{display:flex;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums}
+.meta b{color:var(--fg);font-weight:700}
+.meta button{margin-left:auto;background:none;border:0;color:var(--accent);padding:0}
+
+.settings{display:grid;gap:2px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;background:var(--raise);padding:12px 14px;min-height:54px}
+.row .t{display:flex;flex-direction:column;min-width:0}
+.row .t span{font-size:15px}
+.row .t em{font-style:normal;color:var(--dim);font-size:12.5px}
+.row.slider{grid-template-columns:1fr;gap:8px}
+.row.slider .head{display:flex;justify-content:space-between;font-size:15px}
+.row.slider .head output{color:var(--dim);font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:13px}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.seg{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:none;padding:7px 12px;border-radius:7px;font-size:14px;color:var(--dim)}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg);font-weight:700}
+.switch{appearance:none;-webkit-appearance:none;width:50px;height:30px;border-radius:99px;background:var(--line);position:relative;transition:background .2s;margin:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--fg);transition:transform .2s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{transform:translateX(20px)}
+.note{font-size:13px;color:var(--dim);margin:0}
+.note.warn{color:var(--accent)}
+
+.go-bar{position:fixed;left:0;right:0;bottom:0;z-index:5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px calc(14px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(to top,var(--bg) 60%,transparent)}
+.go{display:block;width:100%;max-width:640px;margin:0 auto;border:0;border-radius:16px;padding:17px;background:var(--accent);color:var(--accent-ink);font:700 18px/1 var(--f-display);letter-spacing:.01em}
+.go:active{transform:scale(.985)}
+
+/* ---------- Prompter ---------- */
+.prompter{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.prompter video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.9}
+.prompter .ambient{position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%,#241b2e 0%,var(--bg) 60%)}
+.island{position:absolute;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));
+  top:calc(env(safe-area-inset-top,0px) + 6px);height:var(--winh,34vh);background:var(--panel);
+  border-radius:28px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.55);transition:height .25s ease}
+.prompter.full .island{top:0;left:0;right:0;height:100%;border-radius:0;padding-top:env(safe-area-inset-top,0px)}
+.viewport{position:absolute;inset:0;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 14%,#000 80%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 14%,#000 80%,transparent 100%)}
+.prompter.mirror .viewport{transform:scaleX(-1)}
+.track{position:absolute;left:0;right:0;top:0;padding:0 22px;will-change:transform;
+  font-family:var(--f-body);font-weight:700;font-size:var(--fs,30px);line-height:1.38;color:var(--fg);overflow-wrap:break-word}
+.track p{margin:0 0 .55em}
+.track .w{transition:color .25s}
+.track .w.done{color:var(--read)}
+.track .w.now{color:var(--accent)}
+.readline{position:absolute;left:8px;width:5px;height:calc(var(--fs,30px) * 1.1);border-radius:3px;background:var(--accent);opacity:.85;pointer-events:none}
+.prompter.full .readline{left:6px}
+.status{position:absolute;right:12px;bottom:8px;background:var(--panel);padding:3px 8px;border-radius:99px;font:12px var(--f-mono);color:var(--dim);display:flex;gap:8px;align-items:center;pointer-events:none}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.status.live .dot{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+.hud{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px calc(14px + env(safe-area-inset-bottom,0px));transition:opacity .3s}
+.prompter.full .hud{background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}
+.hud.faded{opacity:0;pointer-events:none}
+.hud .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.hb{width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(23,20,29,.78);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);display:grid;place-items:center;padding:0}
+.hb svg{width:22px;height:22px;fill:none;stroke:var(--fg);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hb.big{width:68px;height:68px;background:var(--fg)}
+.hb.big svg{stroke:var(--bg);fill:var(--bg);width:26px;height:26px}
+.hb.rec svg{fill:var(--rec);stroke:none}
+.hb.rec.on{background:var(--rec)}
+.hb.rec.on svg{fill:#fff}
+.chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.chip{border:1px solid rgba(255,255,255,.14);background:rgba(23,20,29,.78);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border-radius:99px;padding:8px 14px;font-size:14px;font-variant-numeric:tabular-nums}
+.chip[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+.toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + var(--winh,34vh) + 22px);transform:translateX(-50%);
+  background:var(--raise);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;max-width:min(90vw,420px);text-align:center}
+.prompter.full .toast{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+.count{position:absolute;inset:0;display:grid;place-items:center;font:700 120px/1 var(--f-display);color:var(--accent);pointer-events:none;text-shadow:0 0 40px rgba(0,0,0,.6)}
+.count span{animation:pop 1s ease-out}
+@keyframes pop{from{transform:scale(1.4);opacity:0}30%{opacity:1}to{transform:scale(1);opacity:.8}}
+
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--raise);border-top:1px solid var(--line);border-radius:22px 22px 0 0;
+  padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));
+  padding-block:18px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;z-index:3}
+.sheet h2{margin:0;font:700 19px var(--f-display)}
+.sheet video{position:static;width:100%;max-height:40vh;border-radius:12px;transform:none;background:#000;object-fit:contain}
+.sheet .acts{display:flex;gap:10px}
+.sheet .acts button{flex:1;border-radius:12px;padding:14px;border:1px solid var(--line);background:var(--bg);font-weight:700}
+.sheet .acts .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+@media (orientation:landscape) and (max-height:500px){
+  .island{--winh:46vh}
+  textarea#script{min-height:50vh}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="editor" id="editor">
+  <header class="brand">
+    <div class="pill" aria-hidden="true"></div>
+    <h1>Cue Island</h1>
+    <small id="saved">Saved on this phone</small>
+  </header>
+  <p class="lede">Your script scrolls in a dark window right under the front camera, so you read while looking at the lens. Speak and it follows your voice, or let it glide at a steady pace.</p>
+
+  <section class="script-box">
+    <label class="label" for="script">Script</label>
+    <textarea id="script" spellcheck="true" placeholder="Paste or type what you want to say…"></textarea>
+    <div class="meta">
+      <span><b id="wc">0</b> words</span>
+      <span>≈ <b id="dur">0:00</b> at 150 wpm</span>
+      <button type="button" id="sample">Load example</button>
+    </div>
+  </section>
+
+  <section class="settings" aria-label="Prompter settings">
+    <div class="row">
+      <div class="t"><span>Scrolling</span><em id="modeHint">Follows your voice as you read</em></div>
+      <div class="seg" role="group" aria-label="Scrolling mode">
+        <button type="button" id="mVoice" data-mode="voice">Voice</button>
+        <button type="button" id="mAuto" data-mode="auto">Auto</button>
+      </div>
+    </div>
+    <div class="row slider">
+      <div class="head"><label for="speed">Auto speed</label><output id="speedOut"></output></div>
+      <input type="range" id="speed" min="10" max="160" step="2">
+    </div>
+    <div class="row slider">
+      <div class="head"><label for="fs">Text size</label><output id="fsOut"></output></div>
+      <input type="range" id="fs" min="18" max="64" step="1">
+    </div>
+    <div class="row slider">
+      <div class="head"><label for="winh">Window height</label><output id="winhOut"></output></div>
+      <input type="range" id="winh" min="16" max="100" step="1">
+    </div>
+    <div class="row">
+      <div class="t"><span>Camera preview</span><em>See yourself behind the script, and record</em></div>
+      <input type="checkbox" class="switch" id="camera" aria-label="Camera preview">
+    </div>
+    <div class="row">
+      <div class="t"><span>Mirror text</span><em>For a teleprompter glass rig</em></div>
+      <input type="checkbox" class="switch" id="mirror" aria-label="Mirror text">
+    </div>
+    <div class="row">
+      <div class="t"><span>Countdown</span><em>Seconds before the scroll starts</em></div>
+      <div class="seg" role="group" aria-label="Countdown">
+        <button type="button" data-count="0">Off</button>
+        <button type="button" data-count="3">3</button>
+        <button type="button" data-count="5">5</button>
+      </div>
+    </div>
+  </section>
+  <p class="note" id="envNote"></p>
+
+  <div class="go-bar"><button type="button" class="go" id="go">Start prompting</button></div>
+</main>
+
+<section class="prompter" id="prompter" hidden aria-label="Teleprompter">
+  <div class="ambient"></div>
+  <video id="cam" playsinline muted autoplay hidden></video>
+  <div class="island" id="island">
+    <div class="viewport" id="viewport"><div class="track" id="track"></div></div>
+    <div class="readline" id="readline"></div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Paused</span></div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="count" id="count" hidden></div>
+
+  <div class="hud" id="hud">
+    <div class="chips">
+      <button type="button" class="chip" id="cMode"></button>
+      <button type="button" class="chip" id="cSlower" aria-label="Slower">−</button>
+      <span class="chip" id="cSpeed"></span>
+      <button type="button" class="chip" id="cFaster" aria-label="Faster">+</button>
+      <button type="button" class="chip" id="cSize">Aa</button>
+    </div>
+    <div class="bar">
+      <button type="button" class="hb" id="bClose" aria-label="Back to script"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button type="button" class="hb" id="bRestart" aria-label="Back to start"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg></button>
+      <button type="button" class="hb big" id="bPlay" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5l11 7-11 7z"/></svg></button>
+      <button type="button" class="hb" id="bFull" aria-label="Toggle full screen text"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button type="button" class="hb rec" id="bRec" aria-label="Record video" hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet" hidden>
+    <h2>Your take</h2>
+    <video id="playback" playsinline controls></video>
+    <p class="note" id="sheetNote">Tap Save, then choose “Save Video” to put it in Photos.</p>
+    <div class="acts">
+      <button type="button" id="discard">Discard</button>
+      <button type="button" class="primary" id="saveVid">Save</button>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const SAMPLE = `Hey, I'm glad you're here. Today I want to show you something small that changed how I record videos.
+
+For years I read my notes from a second screen, and you could always tell. My eyes drifted away from the lens and the whole thing felt stiff.
+
+Now the script sits right under the camera. It moves when I talk, and it waits when I pause to think. That means I can look straight at you and still hit every point.
+
+So here's the plan for the next few minutes. First, the setup. Then, three habits that make you sound natural on camera. And finally, how to finish strong without rambling.
+
+Let's get into it.`;
+
+  const DEF = {script: SAMPLE, mode: 'voice', speed: 48, fs: 30, winh: 34, camera: false, mirror: false, count: 3};
+  let S = {...DEF};
+  try { Object.assign(S, JSON.parse(localStorage.getItem('cueisland') || '{}')); } catch (e) {}
+  const save = () => { try { localStorage.setItem('cueisland', JSON.stringify(S)); $('saved').textContent = 'Saved on this phone'; } catch (e) { $('saved').textContent = ''; } };
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  /* ---------- Editor wiring ---------- */
+  const ta = $('script');
+  ta.value = S.script;
+  const countWords = t => (t.match(/\S+/g) || []).length;
+  const fmt = s => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
+  function meta() {
+    const n = countWords(ta.value);
+    $('wc').textContent = n;
+    $('dur').textContent = fmt(n / 150 * 60);
+  }
+  ta.addEventListener('input', () => { S.script = ta.value; meta(); save(); });
+  $('sample').onclick = () => { ta.value = S.script = SAMPLE; meta(); save(); };
+
+  const sliders = {
+    speed: v => v + ' px/s',
+    fs: v => v + ' pt',
+    winh: v => v >= 100 ? 'Full screen' : v + '% of screen'
+  };
+  for (const k in sliders) {
+    const el = $(k);
+    el.value = S[k];
+    const out = () => { $(k + 'Out').textContent = sliders[k](+el.value); };
+    out();
+    el.addEventListener('input', () => { S[k] = +el.value; out(); save(); });
+  }
+  $('camera').checked = S.camera;
+  $('mirror').checked = S.mirror;
+  $('camera').onchange = e => { S.camera = e.target.checked; save(); };
+  $('mirror').onchange = e => { S.mirror = e.target.checked; save(); };
+
+  function paintSegs() {
+    document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+    document.querySelectorAll('[data-count]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.count === S.count));
+    $('modeHint').textContent = S.mode === 'voice' ? 'Follows your voice as you read' : 'Glides at a steady speed';
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; paintSegs(); save(); });
+  document.querySelectorAll('[data-count]').forEach(b => b.onclick = () => { S.count = +b.dataset.count; paintSegs(); save(); });
+  paintSegs(); meta();
+
+  const notes = [];
+  if (!SR) notes.push('Voice following needs Safari on iOS 14.5 or later. Here, Voice mode falls back to Auto.');
+  if (navigator.standalone === false && /iPhone|iPad/.test(navigator.userAgent)) notes.push('Tip: tap Share, then “Add to Home Screen” to use it like an app.');
+  $('envNote').textContent = notes.join(' ');
+
+  /* ---------- Prompter ---------- */
+  const P = $('prompter'), track = $('track'), island = $('island'), viewport = $('viewport');
+  let words = [], wordEls = [], idx = 0, offset = 0, target = 0, playing = false, raf = 0, last = 0;
+  let rec = null, recWanted = false, camStream = null, wakeLock = null, mode = S.mode;
+
+  const norm = w => w.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+
+  function build() {
+    track.textContent = '';
+    words = []; wordEls = [];
+    const paras = S.script.trim().split(/\n\s*\n|\n/);
+    for (const para of paras) {
+      if (!para.trim()) continue;
+      const p = document.createElement('p');
+      para.trim().split(/\s+/).forEach((tok, i) => {
+        if (i) p.appendChild(document.createTextNode(' '));
+        const s = document.createElement('span');
+        s.className = 'w'; s.textContent = tok;
+        p.appendChild(s);
+        const n = norm(tok);
+        if (n) { words.push(n); wordEls.push(s); }
+        else if (wordEls.length) { /* punctuation-only token rides along with previous word */ }
+      });
+      track.appendChild(p);
+    }
+    layout();
+  }
+  function lineY() { return island.clientHeight * (P.classList.contains('full') ? .3 : .26); }
+  function layout() {
+    const y = lineY();
+    track.style.paddingTop = y + 'px';
+    track.style.paddingBottom = island.clientHeight + 'px';
+    $('readline').style.top = (y + (P.classList.contains('full') ? parseFloat(getComputedStyle(island).paddingTop) : 0)) + 'px';
+  }
+  function maxOffset() { return Math.max(0, track.scrollHeight - island.clientHeight); }
+  function apply() { track.style.transform = `translate3d(0,${-offset}px,0)`; }
+
+  function paintWords() {
+    for (let i = 0; i < wordEls.length; i++) {
+      const c = wordEls[i].classList;
+      c.toggle('done', i < idx);
+      c.toggle('now', i === idx);
+    }
+  }
+  let paintedIdx = -1;
+  function setIdx(i) {
+    idx = Math.max(0, Math.min(wordEls.length, i));
+    if (idx === paintedIdx) return;
+    // incremental repaint
+    const lo = Math.min(idx, paintedIdx < 0 ? 0 : paintedIdx) - 1, hi = Math.max(idx, paintedIdx) + 1;
+    if (paintedIdx < 0 || Math.abs(idx - paintedIdx) > 200) paintWords();
+    else for (let k = Math.max(0, lo); k <= Math.min(wordEls.length - 1, hi); k++) {
+      wordEls[k].classList.toggle('done', k < idx); wordEls[k].classList.toggle('now', k === idx);
+    }
+    paintedIdx = idx;
+    const el = wordEls[Math.min(idx, wordEls.length - 1)];
+    if (el) target = Math.min(maxOffset(), Math.max(0, el.offsetTop - lineY()));
+  }
+  function idxAtLine() {
+    const y = offset + lineY();
+    for (let i = 0; i < wordEls.length; i++) {
+      const el = wordEls[i];
+      if (el.offsetTop + el.offsetHeight > y) return i;
+    }
+    return wordEls.length;
+  }
+
+  function tick(t) {
+    const dt = Math.min(.05, (t - last) / 1000 || 0); last = t;
+    if (!dragging) {
+      if (playing && mode === 'auto') {
+        offset += S.speed * dt;
+        if (offset >= maxOffset()) { offset = maxOffset(); pause(); toast('End of script'); }
+      } else if (playing && mode === 'voice') {
+        offset += (target - offset) * Math.min(1, dt * 6);
+      }
+      offset = Math.max(0, Math.min(maxOffset(), offset));
+      apply();
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------- Voice following ---------- */
+  let heardKey = '', heardCount = 0, ctx = [];
+  function hear(tok) {
+    const W = 40;
+    let best = -1, bestScore = 0;
+    for (let j = idx; j < Math.min(words.length, idx + W); j++) {
+      if (!same(words[j], tok)) continue;
+      let sc = 1;
+      for (let k = 1; k <= 3; k++) if (j - k >= 0 && ctx.length - k >= 0 && same(words[j - k], ctx[ctx.length - k])) sc++;
+      if (sc > bestScore) { bestScore = sc; best = j; }
+    }
+    if (best >= 0 && (bestScore >= 2 || best - idx <= 4)) setIdx(best + 1);
+    ctx.push(tok); if (ctx.length > 6) ctx.shift();
+  }
+  function same(a, b) {
+    if (a === b) return true;
+    if (a.length >= 5 && b.length >= 5 && a.slice(0, 4) === b.slice(0, 4)) return true;
+    return false;
+  }
+  function startVoice() {
+    if (!SR) { toast('Voice following is not available in this browser. Using Auto.'); setMode('auto'); return false; }
+    if (rec) return true;
+    rec = new SR();
+    rec.continuous = true; rec.interimResults = true;
+    rec.lang = navigator.language || 'en-US';
+    rec.onresult = e => {
+      const r = e.results.length - 1;
+      const toks = (e.results[r][0].transcript || '').split(/\s+/).map(norm).filter(Boolean);
+      const key = r + ':' + (e.results[r].isFinal ? 'f' : 'i');
+      if (String(r) !== heardKey.split(':')[0]) heardCount = 0;
+      heardKey = key;
+      for (let i = heardCount; i < toks.length; i++) hear(toks[i]);
+      heardCount = toks.length;
+      if (e.results[r].isFinal) heardCount = 0, heardKey = '';
+    };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        recWanted = false; rec = null;
+        toast('Microphone or Speech Recognition is blocked. Allow it in Settings › Safari, or use Auto.');
+        setMode('auto');
+      }
+    };
+    rec.onend = () => { rec = null; heardCount = 0; heardKey = ''; if (recWanted && playing && mode === 'voice') setTimeout(() => recWanted && playing && startVoice(), 250); };
+    recWanted = true;
+    try { rec.start(); } catch (err) { rec = null; return false; }
+    return true;
+  }
+  function stopVoice() { recWanted = false; if (rec) { try { rec.stop(); } catch (e) {} rec = null; } }
+
+  /* ---------- Play / pause ---------- */
+  let countTimer = 0;
+  function play() {
+    if (playing) return;
+    if (mode === 'voice') { setIdx(idxAtLine()); ctx = []; }
+    const go = () => {
+      playing = true; status();
+      if (mode === 'voice') startVoice();
+      lockWake();
+    };
+    if (S.count > 0 && !P.dataset.started) {
+      P.dataset.started = '1';
+      let n = S.count;
+      const c = $('count'); c.hidden = false;
+      const step = () => {
+        if (n === 0) { c.hidden = true; go(); return; }
+        c.innerHTML = '<span>' + n + '</span>'; n--;
+        countTimer = setTimeout(step, 1000);
+      };
+      step();
+    } else go();
+    fadeHud();
+  }
+  function pause() {
+    clearTimeout(countTimer); $('count').hidden = true;
+    playing = false; stopVoice(); status(); showHud();
+  }
+  function status() {
+    $('status').classList.toggle('live', playing);
+    $('statusText').textContent = playing ? (mode === 'voice' ? 'Listening' : 'Scrolling') : 'Paused';
+    $('playIcon').innerHTML = playing ? '<path d="M8 5v14M16 5v14" stroke-width="3.2"/>' : '<path d="M8 5l11 7-11 7z"/>';
+    $('bPlay').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    $('cMode').textContent = mode === 'voice' ? '🎙 Voice' : 'Auto';
+    $('cMode').setAttribute('aria-pressed', mode === 'voice');
+    $('cSpeed').textContent = mode === 'auto' ? S.speed + ' px/s' : 'Follows you';
+    $('cSlower').hidden = $('cFaster').hidden = mode !== 'auto';
+  }
+  function setMode(m) {
+    const was = playing;
+    if (playing) pause();
+    mode = m; S.mode = m; save(); paintSegs(); status();
+    if (m === 'auto') { idx = 0; paintedIdx = -1; wordEls.forEach(el => el.classList.remove('done', 'now')); }
+    else setIdx(idxAtLine());
+    if (was) play();
+  }
+
+  /* ---------- HUD ---------- */
+  let hudTimer = 0;
+  const hud = $('hud');
+  function showHud() { hud.classList.remove('faded'); clearTimeout(hudTimer); }
+  function fadeHud() { clearTimeout(hudTimer); hudTimer = setTimeout(() => { if (playing) hud.classList.add('faded'); }, 2600); }
+  let toastTimer = 0;
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3200); }
+
+  $('bPlay').onclick = () => playing ? pause() : play();
+  $('bRestart').onclick = () => { pause(); offset = target = 0; setIdx(0); if (mode === 'auto') { idx = 0; paintedIdx = -1; paintWords(); wordEls.forEach(el => el.classList.remove('done', 'now')); } apply(); delete P.dataset.started; };
+  $('bClose').onclick = close;
+  $('bFull').onclick = () => { P.classList.toggle('full'); requestAnimationFrame(() => { layout(); if (mode === 'voice') setIdx(idx); }); };
+  $('cMode').onclick = () => setMode(mode === 'voice' ? 'auto' : 'voice');
+  const bump = d => { S.speed = Math.max(10, Math.min(160, S.speed + d)); $('speed').value = S.speed; $('speedOut').textContent = S.speed + ' px/s'; save(); status(); fadeHud(); };
+  $('cSlower').onclick = () => bump(-6);
+  $('cFaster').onclick = () => bump(6);
+  const sizes = [24, 30, 36, 44, 54];
+  $('cSize').onclick = () => {
+    const i = sizes.findIndex(s => s > S.fs);
+    S.fs = sizes[i < 0 ? 0 : i]; $('fs').value = S.fs; $('fsOut').textContent = S.fs + ' pt';
+    P.style.setProperty('--fs', S.fs + 'px'); save();
+    requestAnimationFrame(() => { layout(); setIdx(idx); });
+  };
+
+  /* Drag to scrub, tap to pause/play */
+  let dragging = false, dragY = 0, dragStart = 0, moved = 0;
+  island.addEventListener('pointerdown', e => { dragging = true; dragY = dragStart = e.clientY; moved = 0; showHud(); island.setPointerCapture(e.pointerId); });
+  island.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const dy = e.clientY - dragY; dragY = e.clientY; moved = Math.max(moved, Math.abs(e.clientY - dragStart));
+    offset = Math.max(0, Math.min(maxOffset(), offset - dy)); target = offset; apply();
+  });
+  const endDrag = () => {
+    if (!dragging) return; dragging = false;
+    if (moved < 8) { playing ? pause() : play(); return; }
+    if (mode === 'voice') { const i = idxAtLine(); idx = -1; setIdx(i); ctx = []; target = offset; }
+    if (playing) fadeHud();
+  };
+  island.addEventListener('pointerup', endDrag);
+  island.addEventListener('pointercancel', endDrag);
+  P.addEventListener('pointerdown', e => { if (!island.contains(e.target)) { showHud(); fadeHud(); } });
+  document.addEventListener('keydown', e => {
+    if (P.hidden) return;
+    if (e.code === 'Space') { e.preventDefault(); playing ? pause() : play(); }
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowUp') { offset = Math.max(0, offset - 40); target = offset; apply(); }
+    if (e.key === 'ArrowDown') { offset = Math.min(maxOffset(), offset + 40); target = offset; apply(); }
+  });
+
+  /* ---------- Camera + recording ---------- */
+  async function startCam() {
+    if (!S.camera || !hasCam) return;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}}, audio: false});
+      const v = $('cam'); v.srcObject = camStream; v.hidden = false; await v.play().catch(() => {});
+      $('bRec').hidden = !window.MediaRecorder;
+    } catch (e) {
+      toast('Camera is not available here. Allow camera access, or turn the preview off.');
+    }
+  }
+  function stopCam() {
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = null; $('cam').hidden = true; $('cam').srcObject = null; $('bRec').hidden = true;
+  }
+  let recorder = null, chunks = [], micStream = null, lastBlob = null;
+  $('bRec').onclick = async () => {
+    if (recorder) { recorder.stop(); return; }
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({audio: true});
+    } catch (e) { micStream = null; toast('Recording without sound: microphone not allowed.'); }
+    const stream = new MediaStream([...camStream.getVideoTracks(), ...(micStream ? micStream.getAudioTracks() : [])]);
+    const type = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    chunks = [];
+    recorder = new MediaRecorder(stream, type ? {mimeType: type} : undefined);
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    recorder.onstop = () => {
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      lastBlob = new Blob(chunks, {type: recorder.mimeType || type || 'video/mp4'});
+      recorder = null; $('bRec').classList.remove('on'); $('bRec').setAttribute('aria-label', 'Record video');
+      pause();
+      $('playback').src = URL.createObjectURL(lastBlob);
+      $('sheet').hidden = false;
+    };
+    recorder.start(1000);
+    $('bRec').classList.add('on'); $('bRec').setAttribute('aria-label', 'Stop recording');
+    if (!playing) play();
+  };
+  $('discard').onclick = () => { $('sheet').hidden = true; URL.revokeObjectURL($('playback').src); lastBlob = null; };
+  $('saveVid').onclick = async () => {
+    if (!lastBlob) return;
+    const ext = /mp4/.test(lastBlob.type) ? 'mp4' : 'webm';
+    const file = new File([lastBlob], 'cue-island-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.' + ext, {type: lastBlob.type});
+    try {
+      if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file]}); $('sheetNote').textContent = 'Shared.'; return; }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    $('sheetNote').textContent = 'If nothing downloaded, long-press the video above and choose Save.';
+  };
+
+  async function lockWake() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => wakeLock = null); } } catch (e) {} }
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) pause(); });
+
+  /* ---------- Open / close ---------- */
+  function open() {
+    if (!countWords(S.script)) { ta.focus(); return; }
+    mode = S.mode;
+    if (mode === 'voice' && !SR) mode = 'auto';
+    P.style.setProperty('--fs', S.fs + 'px');
+    P.style.setProperty('--winh', S.winh + 'vh');
+    P.classList.toggle('full', S.winh >= 100);
+    P.classList.toggle('mirror', S.mirror);
+    $('editor').hidden = true; P.hidden = false; $('sheet').hidden = true;
+    delete P.dataset.started;
+    build(); offset = target = 0; idx = 0; paintedIdx = -1; apply(); status(); showHud();
+    startCam();
+    last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+    toast(mode === 'voice' ? 'Tap play, then start reading. Drag the text to jump around.' : 'Tap the text to pause. Drag it to jump around.');
+  }
+  function close() {
+    pause(); if (recorder) recorder.stop();
+    stopCam(); cancelAnimationFrame(raf);
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    P.hidden = true; $('editor').hidden = false;
+  }
+  $('go').onclick = open;
+  window.addEventListener('resize', () => { if (!P.hidden) { layout(); if (mode === 'voice') setIdx(idx); } });
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude|anthropic/.test(location.hostname)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+<!--ARTIFACT-END-->
+</body>
+</html>
