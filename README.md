@@ -1,6 +1,8 @@
 # Cue Island
 
-A teleprompter for iPhone. Your script scrolls in a dark window right under the front camera (by the Dynamic Island), so you read while looking at the lens.
+A teleprompter for iPhone. A black window drops out of the Dynamic Island / notch, and the line you are reading sits right under the front camera, so you look at the lens the whole time.
+
+**Install it to your Home Screen** for the full effect: only then can the text reach all the way up to the camera. In a Safari tab it starts below the status bar.
 
 ## Features
 - **Voice following**: listens as you read and keeps your place word by word. It waits when you pause and skips ahead when you jump.
